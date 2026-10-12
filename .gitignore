@@ -1,0 +1,9 @@
+   node_modules/
+   *.parquet
+   _sub.geojson
+   .DS_Store
+   # customer data: never commit CRM exports
+   *.xlsx
+   *.xls
+   seed/
+   dist/
