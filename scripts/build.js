@@ -22,7 +22,7 @@ const libCss = ['node_modules/leaflet/dist/leaflet.css', 'node_modules/leaflet.m
 let html = R('src/index.html');
 html = html.replace('/*INLINE_LIB_CSS*/', () => libCss);
 html = html.replace('<!--INLINE_DATA-->', () => `<script>window.GEO_META=${js(meta)};window.GEO_TOWNS=${js(towns)};window.GEO_TOPO_GZ="${gz64(topo)}";window.GEO_GAZ_GZ=${JSON.stringify(gazGz)};</script>`);
-const app = ['src/geo.js', 'src/ingest.js', 'src/store.js', 'src/analytics.js', 'src/app.js'].map(p => `<script>/* ${p} */\n${js(R(p))}\n</script>`).join('\n');
+const app = ['src/config.js', 'src/geo.js', 'src/ingest.js', 'src/store.js', 'src/analytics.js', 'src/app.js'].map(p => `<script>/* ${p} */\n${js(R(p))}\n</script>`).join('\n');
 html = html.replace('<!--INLINE_APP-->', () => app);
 fs.mkdirSync(path.join(ROOT, 'dist/data/gazetteer'), { recursive: true });
 fs.writeFileSync(path.join(ROOT, 'dist/index.html'), html);

@@ -88,23 +88,85 @@
     }
   }
 
+  async function gunzipB64(b64) {
+    const bin = atob(b64), bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+    return JSON.parse(await new Response(stream).text());
+  }
+
+  // Google Apps Script web app over Google Drive (apps-script/Code.gs): one shared history for everyone with the key
+  class AppsScriptStore {
+    constructor(url, key) { this.mode = 'drive'; this.shared = true; this.url = url; this.key = key; this.b = {}; this.c = {}; this.kv = {}; this.stamp = '0'; }
+    async _call(params, body) {
+      let r;
+      try {
+        if (body) r = await fetch(this.url, { method: 'POST', body: JSON.stringify(Object.assign({ key: this.key }, body)) }); // text/plain: no CORS preflight
+        else r = await fetch(this.url + '?' + new URLSearchParams(Object.assign({ key: this.key }, params)));
+      } catch (e) { const er = new Error('Cannot reach the shared database. Check the internet connection, or the URL in src/config.js.'); er.code = 'network'; throw er; }
+      let j; try { j = await r.json(); } catch (e) { const er = new Error('The shared database URL did not answer as expected. It must be the Web app URL ending in /exec, deployed with access "Anyone".'); er.code = 'server'; throw er; }
+      if (!j.ok) { const er = new Error(j.error || 'Shared database error'); er.code = /access key/i.test(j.error || '') ? 'auth' : 'server'; throw er; }
+      if (j.stamp) this.stamp = j.stamp;
+      return j;
+    }
+    async init() { await this._load(); return true; }
+    async _load() {
+      const j = await this._call({ action: 'load' });
+      const b = {}, c = {};
+      for (const m64 of j.months || []) { const m = await gunzipB64(m64); Object.assign(b, m.batches || {}); Object.assign(c, m.chunks || {}); }
+      this.b = b; this.c = c; this.kv = j.kv || {};
+    }
+    async listBatches() { return Object.values(this.b).sort((a, b) => String(a.uploadedAt).localeCompare(String(b.uploadedAt))); }
+    async loadRecords() { return Object.values(this.c); }
+    async saveBatch(meta, chunks) {
+      await this._call(null, { action: 'saveBatch', meta, chunks });
+      this.b[meta.id] = meta; chunks.forEach(ch => { this.c[ch.b + '_' + ch.n] = ch; });
+    }
+    async deleteBatch(id) {
+      await this._call(null, { action: 'deleteBatch', id });
+      delete this.b[id]; for (const k of Object.keys(this.c)) if (this.c[k].b === id) delete this.c[k];
+    }
+    async getKV(name) { return this.kv[name] === undefined ? null : this.kv[name]; }
+    async setKV(name, value) { await this._call(null, { action: 'setKV', name, value }); this.kv[name] = value; }
+    onChange(cb) {
+      const t = setInterval(async () => {
+        if (document.hidden) return;
+        try { const before = this.stamp; const j = await this._call({ action: 'stamp' }); if (j.stamp !== before) { await this._load(); cb(); } } catch (e) { /* try again next round */ }
+      }, 90000);
+      return () => clearInterval(t);
+    }
+  }
+  const KEY_STORE = 'fva_access_key';
+  function savedKey() { try { return localStorage.getItem(KEY_STORE) || ''; } catch (e) { return ''; } }
+  function rememberKey(k) { try { if (k) localStorage.setItem(KEY_STORE, k); else localStorage.removeItem(KEY_STORE); } catch (e) { /* private mode */ } }
+
   function chunkRecords(batchId, packedRows, fields) {
     const chunks = [];
     for (let i = 0; i < packedRows.length; i += CHUNK) chunks.push({ b: batchId, n: chunks.length, f: fields, rows: packedRows.slice(i, i + CHUNK) });
     return chunks;
   }
 
-  // pick the best available backend: shared artifact db > browser IndexedDB > memory
-  async function openStore() {
+  /* pick the backend: claude.ai shared artifact database > Google Drive (if configured) > browser IndexedDB > memory.
+     Returns {store} or {needsKey: true, url, error} when the Drive store needs the team access key. */
+  async function openStore(opts) {
+    opts = opts || {};
     try {
       if (G.claude && typeof G.claude.use === 'function') {
         const db = await Promise.race([G.claude.use('db'), new Promise(r => setTimeout(() => r(null), 6000))]);
-        if (db) { const s = new ClaudeDbStore(db); await s.listBatches(); return s; }
+        if (db) { const s = new ClaudeDbStore(db); await s.listBatches(); return { store: s }; }
       }
-    } catch (e) { console.warn('Shared database unavailable', e); }
-    try { const s = new IdbStore(); await s.init(); return s; } catch (e) { console.warn('IndexedDB unavailable', e); }
-    return new MemoryStore();
+    } catch (e) { console.warn('Shared artifact database unavailable', e); }
+    const url = (G.FVA_CONFIG && G.FVA_CONFIG.sharedStoreUrl || '').trim();
+    if (url) {
+      const key = opts.key || savedKey();
+      if (!key) return { needsKey: true, url };
+      const s = new AppsScriptStore(url, key);
+      try { await s.init(); rememberKey(key); return { store: s }; }
+      catch (e) { if (e.code === 'auth') rememberKey(''); return { needsKey: e.code === 'auth', url, error: e }; }
+    }
+    try { const s = new IdbStore(); await s.init(); return { store: s }; } catch (e) { console.warn('IndexedDB unavailable', e); }
+    return { store: new MemoryStore() };
   }
 
-  G.Store = { openStore, chunkRecords, MemoryStore, IdbStore, ClaudeDbStore, CHUNK };
+  G.Store = { openStore, chunkRecords, MemoryStore, IdbStore, ClaudeDbStore, AppsScriptStore, rememberKey, savedKey, CHUNK };
 })(typeof window !== 'undefined' ? window : globalThis);

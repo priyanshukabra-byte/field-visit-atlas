@@ -69,10 +69,27 @@ All storage goes through `src/store.js`, which has one small interface: `listBat
 | Where the page runs | Backend used | Who sees the data |
 |---|---|---|
 | Published as a claude.ai artifact | the artifact's shared database | everyone the artifact is shared with |
-| Your own web host or local file | browser IndexedDB | only that browser |
+| Your own web host, with `sharedStoreUrl` set in `src/config.js` | Google Drive via `apps-script/Code.gs` | everyone with the team access key |
+| Your own web host or local file, without it | browser IndexedDB | only that browser |
 | Neither available | memory | nobody (lost on reload) |
 
-**Shared team storage on your own deployment.** To give a team one shared history outside claude.ai, implement the same interface on a database and return it from `openStore()`. A Supabase sketch:
+**Shared storage for the team (Google Drive, free).** Out of the box, the GitHub/Vercel/Netlify version keeps uploads in each person's browser, so a shared link shows an empty dashboard to everyone else. To give the team one shared history:
+
+1. With a company Google account, open <https://script.google.com> and click **New project**.
+2. Replace the sample code with the whole of `apps-script/Code.gs` and save.
+3. Go to **Project Settings → Script properties → Add script property**. Name it `ACCESS_KEY` and set it to a long passphrase.
+4. Go to **Deploy → New deployment → Web app**. Set *Execute as: Me* and *Who has access: Anyone*, then click **Deploy**. Authorize it (Advanced → Go to project → Allow) and copy the Web app URL, which ends in `/exec`.
+5. In the repository, edit `src/config.js` and paste the URL between the quotes of `sharedStoreUrl`. Commit; the site rebuilds in about 2 minutes.
+6. Open the site and enter the access key; each person does this once per browser. On the **Sources** page, use **Copy to shared storage** to move anything uploaded earlier in that browser.
+
+Notes:
+- **Where the data lives:** a Drive folder called "Field Visit Atlas data", owned by the account that deployed the script, with one gzipped file per month.
+- **Size:** about 5 KB per day of uploads, so a year loads in a few MB.
+- **Access:** anyone with the key can read, upload and delete. Change the key in Script properties when someone leaves; everyone then re-enters it.
+- **Keep the key out of GitHub:** never put it in `config.js`, because the repository is public.
+- **Editing the script later:** go to Deploy → Manage deployments → edit → *New version*. The URL stays the same.
+
+**Shared team storage on a database.** To give a team one shared history outside claude.ai, implement the same interface on a database and return it from `openStore()`. A Supabase sketch:
 
 ```js
 class SupabaseStore {
@@ -100,6 +117,7 @@ Geography is re-resolved every time the app loads. Improving the gazetteer or ad
 ## Project layout
 
 ```
+src/config.js         settings: the shared-storage URL (empty = each browser keeps its own data)
 src/index.html        page shell and styles (Archivo; light and dark themes)
 src/geo.js            name normalisation, fuzzy matching, State→District→Taluka→Village resolution
 src/ingest.js         Excel reading, header and column detection, validation, duplicate keys
@@ -111,6 +129,7 @@ scripts/build_geo.py  rebuilds data/ from the government source files
 scripts/bundle-districts.js  decides which states' village lists are embedded in the page
 scripts/build.js      produces dist/
 scripts/make-seed.js  converts an export into stored batch format (for pre-loading a database)
+apps-script/Code.gs   Google Apps Script backend for shared storage on Google Drive
 ```
 
 ## Rebuilding the map data

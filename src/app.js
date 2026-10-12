@@ -70,7 +70,7 @@
     S.geo.gazLoader = async st => { const r = await fetch('data/gazetteer/' + st + '.json'); if (!r.ok) throw new Error('no file'); return r.json(); };
     const T = window.GEO_TOPO;
     S.feat = { states: topojson.feature(T, T.objects.states), districts: topojson.feature(T, T.objects.districts), subs: topojson.feature(T, T.objects.subdistricts) };
-    S.store = await Store.openStore();
+    S.store = await connectStore();
     await loadAll();
     setStoreChip();
     $('#loading').remove();
@@ -79,6 +79,39 @@
     if (S.records.length) setPeriod('7'); else { setPeriod('all'); }
     showView(S.records.length ? 'dashboard' : 'upload');
     S.unsub = S.store.onChange(async () => { if (Date.now() - (S.selfWrite || 0) < 15000) return; await loadAll(); populateFilters(); refresh(); toast('Another person changed the uploads — data refreshed.'); });
+  }
+
+  // storage: shows the access-key screen when the shared Google Drive database needs it
+  function askKey(err) {
+    return new Promise(resolve => {
+      const box = $('#loading');
+      box.className = '';
+      box.innerHTML = `<div class="panel" style="max-width:480px;margin:56px auto"><div class="body">
+        <h2 style="margin:0 0 6px;font-size:18px">Team access key</h2>
+        <p class="muted" style="margin-top:0">Uploads on this dashboard are shared with your team. Enter the access key you were given. It is remembered in this browser.</p>
+        ${err ? `<div class="note" style="margin-bottom:10px">${esc(err.code === 'auth' ? 'That key is not right. Check it and try again.' : err.message)}</div>` : ''}
+        <form id="keyForm" style="display:flex;gap:8px"><input type="password" id="keyIn" autocomplete="current-password" placeholder="Access key" style="flex:1;height:34px;border:1px solid var(--line);border-radius:6px;padding:0 10px;background:var(--surface)" required>
+        <button class="btn primary" type="submit">Open</button></form></div></div>`;
+      $('#keyIn').focus();
+      $('#keyForm').addEventListener('submit', e => { e.preventDefault(); const k = $('#keyIn').value.trim(); if (k) resolve(k); });
+    });
+  }
+  function showStoreError(err) {
+    return new Promise(resolve => {
+      const box = $('#loading'); box.className = '';
+      box.innerHTML = `<div class="panel" style="max-width:520px;margin:56px auto"><div class="body"><h2 style="margin:0 0 6px;font-size:18px">Shared database not reachable</h2>
+        <p>${esc(err.message)}</p><button class="btn primary" id="retryBtn">Try again</button></div></div>`;
+      $('#retryBtn').onclick = () => resolve();
+    });
+  }
+  async function connectStore() {
+    let res = await Store.openStore();
+    while (!res.store) {
+      if (res.needsKey) { const key = await askKey(res.error); $('#loading').textContent = 'Opening the shared database…'; res = await Store.openStore({ key }); }
+      else { await showStoreError(res.error); $('#loading').textContent = 'Opening the shared database…'; res = await Store.openStore(); }
+    }
+    $('#loading').className = 'loading'; $('#loading').textContent = 'Loading data…';
+    return res.store;
   }
 
   async function loadAll() {
@@ -119,8 +152,8 @@
   function setStoreChip() {
     const c = $('#storeChip'); const m = S.store.mode;
     c.classList.toggle('warn', m === 'memory');
-    c.querySelector('span').textContent = m === 'shared' ? 'Shared database' : m === 'browser' ? 'Saved in this browser' : 'Not saved (memory only)';
-    c.title = m === 'shared' ? 'Uploads are stored with this artifact and visible to everyone it is shared with.' : m === 'browser' ? 'Uploads are stored in this browser only (IndexedDB).' : 'Storage is unavailable; data disappears when the page closes.';
+    c.querySelector('span').textContent = m === 'shared' ? 'Shared database' : m === 'drive' ? 'Shared (Google Drive)' : m === 'browser' ? 'Saved in this browser' : 'Not saved (memory only)';
+    c.title = m === 'shared' ? 'Uploads are stored with this artifact and visible to everyone it is shared with.' : m === 'drive' ? 'Uploads are stored in the team Google Drive and visible to everyone with the access key.' : m === 'browser' ? 'Uploads are stored in this browser only (IndexedDB). Other people do not see them.' : 'Storage is unavailable; data disappears when the page closes.';
   }
 
   // ---------- filters ----------
@@ -993,11 +1026,13 @@
     $('#settingsLeft').innerHTML = `
       <div class="panel"><h2>Where uploads are stored</h2><div class="body">
         <p style="margin-top:0"><span class="chip"><i></i>${esc($('#storeChip span').textContent)}</span></p>
-        <p>${S.store.mode === 'shared' ? 'Uploads, location fixes and the territory plan are saved with this artifact on claude.ai. Everyone you share it with sees the same data; people with Contributor access or above can upload and delete. Customer names and phone numbers are included, so share accordingly.'
+        <p>${S.store.mode === 'drive' ? 'Uploads, location fixes and the territory plan are saved in the team Google Drive (folder "Field Visit Atlas data" of the account that deployed the Apps Script). Everyone who opens this page with the access key sees the same data and can upload or delete. Customer names and phone numbers are included, so give the key only to people who should see them, and change it in the Apps Script settings when someone leaves.'
+          : S.store.mode === 'shared' ? 'Uploads, location fixes and the territory plan are saved with this artifact on claude.ai. Everyone you share it with sees the same data; people with Contributor access or above can upload and delete. Customer names and phone numbers are included, so share accordingly.'
           : S.store.mode === 'browser' ? 'Uploads are saved in this browser (IndexedDB). Other people and other browsers do not see them. Clearing site data deletes them. For a shared team version, connect a database (see README: Supabase adapter).'
           : 'Storage is not available, so uploads last only until the page closes.'}</p>
         <p class="muted">${fmt(S.records.length)} rows from ${S.batches.length} upload(s). Location fixes saved: ${Object.keys(S.fixes).length}.</p>
-        <p><button class="btn danger" id="clearAll">Delete all uploaded data</button></p></div></div>
+        <div id="migrateBox"></div>
+        <p>${S.store.mode === 'drive' ? '<button class="btn" id="forgetKey">Forget the access key on this browser</button> ' : ''}<button class="btn danger" id="clearAll">Delete all uploaded data</button></p></div></div>
       <div class="panel"><h2>What this data cannot tell you</h2><div class="body"><ul class="insights">
         <li>Whether a visit happened. The CRM export has no GPS coordinates, check-in times or photos; every location is what the person typed or picked.</li>
         <li>Visit order, travel distance or time spent. Only dates are present, so routes and time-of-day patterns cannot be computed.</li>
@@ -1014,12 +1049,44 @@
         <p class="muted">Village lists are bundled for ${S.bundledStates.map(s => esc(S.geo.states[s].name)).join(', ') || 'no states'}${location.protocol.startsWith('http') ? '; other states load on demand when the page is served from a web host' : ''}. ${missingGaz.length ? 'Districts in your data without a bundled list (placed at taluka centre unless the full list can load): ' + missingGaz.map(esc).join(', ') + '.' : 'All districts in your data have a village list.'}</p></div></div>
       <div class="panel"><h2>Location precision across all data</h2><div class="body"><ul class="minilist">${['gps', 'manual', 'village', 'town', 'taluka', 'district', 'none'].filter(k => precCounts.get(k)).map(k => `<li><span><span class="prec ${k}">${PREC_LABEL[k]}</span></span><span class="num">${fmt(precCounts.get(k))} (${pct(precCounts.get(k) / S.records.length)})</span></li>`).join('')}</ul>
         <p class="muted">Village matching tolerates common spelling variants (w/v, sh/s, aa/a) but rejects ambiguous matches rather than guessing. Rings on the map mark entries placed at a taluka or district centre.</p></div></div>`;
+    if ($('#forgetKey')) $('#forgetKey').onclick = () => { Store.rememberKey(''); location.reload(); };
+    if (S.store.mode === 'drive') renderMigrate();
     const btn = $('#clearAll');
     btn.onclick = async () => {
       if (btn.dataset.armed !== '1') { btn.dataset.armed = '1'; btn.textContent = 'Click again to delete everything'; setTimeout(() => { btn.dataset.armed = ''; btn.textContent = 'Delete all uploaded data'; }, 5000); return; }
       btn.disabled = true; btn.textContent = 'Deleting…'; S.selfWrite = Date.now();
       for (const b of S.batches) await S.store.deleteBatch(b.id);
       await loadAll(); populateFilters(); setPeriod('all'); renderSettings(); toast('All uploads deleted');
+    };
+  }
+
+  // one-time copy of uploads that were saved in this browser before shared storage was switched on
+  async function localLeftovers() {
+    try {
+      const l = new Store.IdbStore(); await l.init();
+      const have = new Set(S.batches.map(b => b.id));
+      const todo = (await l.listBatches()).filter(b => !have.has(b.id));
+      const fixes = (await l.getKV('geoFixes')) || {};
+      const newFixes = Object.keys(fixes).filter(k => !S.fixes[k]).length;
+      return { l, todo, fixes, newFixes };
+    } catch (e) { return { todo: [], newFixes: 0 }; }
+  }
+  async function renderMigrate() {
+    const box = $('#migrateBox'); if (!box) return;
+    const x = await localLeftovers();
+    if (!x.todo.length && !x.newFixes) { box.innerHTML = ''; return; }
+    const rows = x.todo.reduce((a, b) => a + (b.rows || 0), 0);
+    box.innerHTML = `<div class="note info" style="margin:10px 0">This browser still holds ${x.todo.length ? `${x.todo.length} upload(s) with ${fmt(rows)} rows` : ''}${x.todo.length && x.newFixes ? ' and ' : ''}${x.newFixes ? `${x.newFixes} location fix(es)` : ''} saved before shared storage was switched on. Copy them so the team sees them. Rows already in the shared data are not counted twice.</div>
+      <p><button class="btn primary" id="migrateBtn">Copy to shared storage</button></p>`;
+    $('#migrateBtn').onclick = async () => {
+      const btn = $('#migrateBtn'); btn.disabled = true; btn.textContent = 'Copying…'; S.selfWrite = Date.now();
+      try {
+        const recs = await x.l.loadRecords();
+        for (const b of x.todo) { const chunks = recs.filter(c => c.b === b.id).sort((p, q) => p.n - q.n); if (chunks.length) await S.store.saveBatch(b, chunks); }
+        if (x.newFixes) { for (const [k, v] of Object.entries(x.fixes)) if (!S.fixes[k]) S.fixes[k] = v; await S.store.setKV('geoFixes', S.fixes); }
+        const plan = await x.l.getKV('territoryPlan'); if (plan && plan.length && !S.plan.length) await S.store.setKV('territoryPlan', plan);
+        await loadAll(); populateFilters(); refresh(); toast('Copied to shared storage');
+      } catch (e) { toast('Copy failed: ' + (e.message || e), 7000); btn.disabled = false; btn.textContent = 'Copy to shared storage'; }
     };
   }
 
