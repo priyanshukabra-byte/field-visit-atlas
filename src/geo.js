@@ -62,9 +62,36 @@
     // "Pachnaur" vs "Pachnaur Murahi", "Manegaon Bajar" vs "Manegaon"
     const short = la <= lb ? A : B, long = la <= lb ? B : A;
     if (short.c.length >= 5 && short.n === 1 && long.n > 1 && long.t === short.c) s = Math.max(s, 0.9);
+    // compare without qualifier words ("Shegaon Bk." vs "shegaoan", "Lar road" vs "Lar")
+    const ab = A.b || A.c, bb = B.b || B.c;
+    if ((A.b || B.b) && ab.length >= 3 && bb.length >= 3) {
+      if (ab === bb) s = Math.max(s, 0.95);
+      else { const m = Math.max(ab.length, bb.length); s = Math.max(s, 0.97 * (jaroWinkler(ab, bb) + (1 - lev(ab, bb) / m)) / 2); }
+    }
+    // abbreviated words: "Nandgaon kh" vs "Nandgaon Khandeshwar", "Chandur rly" vs "Chandur Railway"
+    if (A.n > 1 && A.n === B.n && A.toks[0] === B.toks[0] && A.toks[0].length >= 4) {
+      let ok = true;
+      for (let i = 1; i < A.n; i++) { const x = A.toks[i], y = B.toks[i]; if (!(x === y || abbrevOf(x, y) || abbrevOf(y, x))) { ok = false; break; } }
+      if (ok) s = Math.max(s, 0.92);
+    }
     return s;
   }
-  function key(s) { const n = norm(s); const toks = n ? n.split(' ') : []; return { c: toks.join(''), k: skel(s), t: toks[0] || '', n: toks.length }; }
+  // words that qualify a place rather than name it: Budruk/Khurd parts of a village, market, crossing, road, station...
+  const QUALIFIERS = new Set(['bk', 'bu', 'budruk', 'bujruk', 'kh', 'khurd', 'kalan', 'buzurg', 'bujurg', 'part', 'chauraha', 'chowk', 'chouk', 'chok', 'tiraha',
+    'fata', 'phata', 'naka', 'bazar', 'bazaar', 'market', 'mandi', 'road', 'rd', 'station', 'stn', 'rly', 'railway', 'camp', 'colony', 'more', 'mod', 'stand', 'gate']);
+  function key(s) {
+    const n = norm(s); const toks = n ? n.split(' ') : [];
+    let core = toks.filter(t => !QUALIFIERS.has(t));
+    if (core.length === 1 && /^(.{4,})(haat|hat)$/.test(core[0])) core = [core[0].replace(/(haat|hat)$/, '')]; // "kurmahat" = Kurma haat (market)
+    const b = core.join('');
+    return { c: toks.join(''), k: skel(s), t: toks[0] || '', n: toks.length, toks, b: b && b !== toks.join('') && b.length >= 3 ? b : '' };
+  }
+  // "kh" -> "khandeshwar", "rly" -> "railway": prefix or in-order letters with the same first letter
+  function abbrevOf(a, w) {
+    if (a.length < 2 || a.length >= w.length || a[0] !== w[0]) return false;
+    let i = 0; for (const ch of w) { if (ch === a[i]) i++; if (i === a.length) return true; }
+    return false;
+  }
 
   // ---------- known aliases (renamed or alternate district names) ----------
   const DISTRICT_ALIASES = {
@@ -74,6 +101,13 @@
     gorakpur: 'gorakhpur', kalhandi: 'kalahandi', allahabad: 'prayagraj', faizabad: 'ayodhya',
     gurgaon: 'gurugram', balasore: 'baleshwar', baleswar: 'baleshwar', bolangir: 'balangir', keonjhar: 'kendujhar', hoshangabad: 'narmadapuram', santkabirnagar: 'santkabeernagar'
   };
+  // renamed towns and towns absorbed into a bigger municipality (village name as recorded -> town name in the reference list)
+  const TOWN_ALIASES = {
+    dharashiv: 'osmanabad', badnera: 'amravati', paratwada: 'achalpur', chhatrapatisambhajinagar: 'aurangabad', sambhajinagar: 'aurangabad',
+    ahilyanagar: 'ahmednagar', prayagraj: 'allahabad', ayodhya: 'faizabad', gurugram: 'gurgaon', narmadapuram: 'hoshangabad', kashi: 'varanasi', banaras: 'varanasi', benaras: 'varanasi'
+  };
+  // sub-district names that differ between CRM and LGD
+  const SUB_ALIASES = { beed: 'bid', ahilyanagar: 'ahmednagar', dharashiv: 'osmanabad' };
   const STATE_ALIASES = {
     orissa: 'odisha', uttaranchal: 'uttarakhand', pondicherry: 'puducherry', chattisgarh: 'chhattisgarh', chhatisgarh: 'chhattisgarh',
     up: 'uttarpradesh', mp: 'madhyapradesh', mh: 'maharashtra', cg: 'chhattisgarh', od: 'odisha', br: 'bihar', ts: 'telangana', tg: 'telangana',
@@ -98,6 +132,11 @@
         const a = e.split(',');
         const o = { n: a[0], lon: 68 + parseInt(a[1], 36) / 1e4, lat: 6 + parseInt(a[2], 36) / 1e4, sid, pop: +a[3] };
         o.key = key(o.n); out.push(o);
+        // Census names carry aliases: "Ramgarh Urf Rajahi", "Dabha(Dava)", "Nawagaon-2 (Nawagaon)"
+        const alts = [];
+        if (/\burf\b/i.test(o.n)) o.n.split(/\burf\b/i).forEach(x => alts.push(x));
+        const par = o.n.match(/^(.*?)\s*\((.+)\)\s*$/); if (par) { alts.push(par[1]); alts.push(par[2]); }
+        for (const x of alts) { const t = x.replace(/[-\d]+$/, '').trim(); if (t.length >= 3 && norm(t) !== norm(o.n)) out.push(Object.assign({}, o, { key: key(t), alias: t })); }
       }
     }
     return out;
@@ -169,7 +208,15 @@
       return null;
     }
     matchSub(raw, did) {
-      const k = key(raw); if (!k.c) return null;
+      let k = key(raw); if (!k.c) return null;
+      if (SUB_ALIASES[k.c]) k = key(SUB_ALIASES[k.c]);
+      const subs0 = this.subByDist[did] || [];
+      // HQ taluka recorded under the district's name, LGD calls it "Sadar" (common in UP, Bihar, Odisha)
+      const dist = this.districts[did];
+      if (dist && sim(k, dist.key) >= 0.95 && !subs0.some(x => x.key.c === k.c)) {
+        const sadar = subs0.find(x => /^sadar$|sadar$/.test(x.key.c));
+        if (sadar) return { s: sadar, score: 0.95 };
+      }
       let best = null, bs = 0, second = 0;
       for (const s of (this.subByDist[did] || [])) {
         let v = sim(k, s.key);
@@ -228,21 +275,29 @@
       }
       const gd = this.districts[res.did];
       if (sm) { res.sid = sm.s.id; res.lon = sm.s.lon; res.lat = sm.s.lat; res.prec = 'taluka'; res.place = sm.s.name; }
-      const vk = key(r.village);
+      let vk = key(r.village);
       if (!vk.c) { res.note = res.note || 'Village missing'; return res; }
+      const townAlias = TOWN_ALIASES[vk.c] || TOWN_ALIASES[vk.b];
+      const tk = townAlias ? key(townAlias) : vk;
       const vils = this.villages(gd.id), towns = this.towns(gd.id);
       const inSub = sm ? vils.filter(v => v.sid === sm.s.id) : [];
       const tryList = [];
       // 1. village inside the recorded taluka (small pool, moderate threshold)
-      if (inSub.length) { const b = this.bestPlace(vk, inSub); if (b && b.score >= 0.875) tryList.push({ b, prec: 'village', w: 0 }); }
-      // 2. town (urban local body) in the district
-      if (towns.length) { const b = this.bestPlace(vk, towns, sm ? sm.s.id : undefined); if (b && b.score >= 0.9) tryList.push({ b, prec: 'town', w: 0.02 }); }
+      if (inSub.length) { const b = this.bestPlace(vk, inSub); if (b && b.score >= 0.88) tryList.push({ b, prec: 'village', w: 0 }); }
+      // 2. town in the district (renamed/merged towns via TOWN_ALIASES; "Nawapara" inside "Gobranawapara")
+      if (towns.length) {
+        let b = this.bestPlace(tk, towns, sm ? sm.s.id : undefined);
+        if ((!b || b.score < 0.9) && tk.c.length >= 6) { const hit = towns.find(t => t.key.c.endsWith(tk.c) || t.key.c.startsWith(tk.c)); if (hit) b = { v: hit, score: 0.9, ties: 1 }; }
+        if (b && b.score >= 0.9) tryList.push({ b, prec: 'town', w: townAlias ? 0.1 : 0.02 });
+      }
       // 3. village anywhere in the district: large pool, so strict and never on a tie
       if (vils.length) { const b = this.bestPlace(vk, vils, sm ? sm.s.id : undefined); if (b && b.ties === 1 && b.score >= 0.95) tryList.push({ b, prec: 'village', w: -0.02 }); }
       if (tryList.length) {
         tryList.sort((x, y) => (y.b.score + y.w) - (x.b.score + x.w));
         const t = tryList[0], v = t.b.v;
         res.lon = v.lon; res.lat = v.lat; res.prec = t.prec; res.place = v.n; res.score = +t.b.score.toFixed(3);
+        if (townAlias && t.prec === 'town') res.note = 'Recorded as "' + r.village + '", which is part of / renamed to ' + v.n;
+        if (v.alias) res.note = (res.note ? res.note + '; ' : '') + 'Matched the alternative name "' + v.alias + '"';
         if (v.sid !== undefined && this.subs[v.sid]) {
           if (sm && v.sid !== sm.s.id) res.note = 'Matched in ' + this.subs[v.sid].name + ', not the recorded taluka';
           res.sid = v.sid;
@@ -256,46 +311,52 @@
       return res;
     }
     // ranked suggestions for the manual fixer
+    /* Suggestions for the manual fixer. Places in the recorded district (or the rep's HQ district) come first.
+       Places elsewhere are only offered for near-exact names and are flagged, because the same village name repeats across India. */
     suggest(r, limit) {
       limit = limit || 6;
-      const vk = key(r.village || r.taluka || '');
-      if (!vk.c) return [];
+      const vk0 = key(r.village || r.taluka || '');
+      if (!vk0.c) return [];
+      const alias = TOWN_ALIASES[vk0.c] || TOWN_ALIASES[vk0.b];
+      const vk = vk0;
       const st = this.matchState(r.state);
       const dm = st ? this.matchDistrict(r.district, st.id) : (r.district ? this.matchDistrict(r.district, null) : null);
-      // districts to prefer: the recorded one, and the rep's headquarter district when it names one
       const pref = new Set(); if (dm) pref.add(dm.d.id);
-      const hq = r.hq ? this.matchDistrict(r.hq, st ? st.id : null) || this.matchDistrict(r.hq, null) : null; if (hq) pref.add(hq.d.id);
-      const anchors = [...pref].map(id => this.districts[id]);
+      const hq = r.hq ? this.matchDistrict(r.hq, st ? st.id : null) : null; if (hq) pref.add(hq.d.id);
       const stId = st ? st.id : (dm ? dm.d.st : (hq ? hq.d.st : null));
-      let dids;
-      if (pref.size) dids = [...pref];
-      else if (stId) dids = (this.distByState[stId] || []).map(d => d.id);
-      else dids = Object.keys(this.gazRaw).map(Number);
+      const current = r.current || null; // the record's present placement, to avoid offering it again
       const out = [], seen = new Set();
-      const rank = (s, did, lat, lon) => {
-        let x = s + (pref.has(did) ? 0.06 : 0);
-        if (anchors.length) { const km = Math.min(...anchors.map(a => Math.hypot((a.lat - lat) * 111, (a.lon - lon) * 104))); x -= Math.min(0.08, km / 4000); }
-        return x;
+      const add = (s, v, did, prec, group) => {
+        const id = did + '|' + v.n + '|' + v.sid + '|' + prec; if (seen.has(id)) return; seen.add(id);
+        if (current && prec === 'taluka' && current.prec === 'taluka' && current.sid === v.sid) return;
+        out.push({ s, v, did, prec, group });
       };
-      const scan = (list, min) => {
-        for (const did of list) {
-          for (const [pl, prec] of [[this.villages(did), 'village'], [this.towns(did), 'town'], [(this.subByDist[did] || []).map(s => ({ n: s.name, lon: s.lon, lat: s.lat, sid: s.id, pop: 5, key: s.key })), 'taluka']]) {
-            for (const v of pl) {
-              const s = sim(vk, v.key); const id = did + '|' + v.n + '|' + v.sid + '|' + prec;
-              if (s >= min && !seen.has(id)) { seen.add(id); out.push({ s, r: rank(s, did, v.lat, v.lon), v, did, prec }); }
-            }
-          }
+      const scan = (dids, min, group) => {
+        for (const did of dids) {
+          for (const v of this.villages(did)) { const s = sim(vk, v.key); if (s >= min) add(s, v, did, 'village', group); }
+          for (const v of this.towns(did)) { const s = Math.max(sim(vk, v.key), alias ? sim(key(alias), v.key) : 0); if (s >= min) add(s, v, did, 'town', group); }
+          for (const sb of (this.subByDist[did] || [])) { const s = sim(vk, sb.key); if (s >= Math.max(min, 0.9)) add(s, { n: sb.name, lon: sb.lon, lat: sb.lat, sid: sb.id, pop: 5 }, did, 'taluka', group); }
         }
       };
-      scan(dids, 0.8);
-      // the place may sit in a neighbouring district (wrong district recorded, or a nearby town): widen to the state
-      if (stId && out.filter(o => o.s >= 0.9).length < 3) scan((this.distByState[stId] || []).map(d => d.id).filter(d => !dids.includes(d)), 0.9);
-      if (hq && hq.d.st !== stId) scan((this.distByState[hq.d.st] || []).map(d => d.id).filter(d => !dids.includes(d)), 0.9);
-      out.sort((a, b) => b.r - a.r || b.v.pop - a.v.pop);
-      return out.slice(0, limit).map(o => ({
-        label: (o.prec === 'taluka' ? 'Taluka centre: ' : '') + o.v.n + (o.prec !== 'taluka' && this.subs[o.v.sid] ? ', ' + this.subs[o.v.sid].name : '') + ', ' + this.districts[o.did].name + (o.prec === 'town' ? ' (town)' : ''),
-        st: this.districts[o.did].st, did: o.did, sid: o.v.sid, lon: o.v.lon, lat: o.v.lat, prec: o.prec, place: o.v.n, score: +o.s.toFixed(3)
-      }));
+      if (pref.size) scan([...pref], 0.78, 0);
+      // the district's headquarters town, for localities inside a city ("Akharaghat" in Muzaffarpur)
+      if (dm) {
+        const d = dm.d; const hqTown = this.towns(d.id).find(t => sim(d.key, t.key) >= 0.92);
+        if (hqTown) add(0.5, hqTown, d.id, 'town', 1);
+      }
+      if (stId) scan((this.distByState[stId] || []).map(d => d.id).filter(d => !pref.has(d)), 0.95, 2);
+      if (!pref.size && !stId) scan(Object.keys(this.gazRaw).map(Number), 0.95, 2);
+      out.sort((a, b) => a.group - b.group || b.s - a.s || b.v.pop - a.v.pop);
+      const recDist = dm ? dm.d.name : null;
+      return out.slice(0, limit).map(o => {
+        const dn = this.districts[o.did].name, sub = this.subs[o.v.sid] ? this.subs[o.v.sid].name : '';
+        let label;
+        if (o.prec === 'taluka') label = 'Taluka centre: ' + o.v.n + ', ' + dn;
+        else if (o.group === 1) label = 'Town: ' + o.v.n + ' (district headquarters; use for a locality inside the city)';
+        else label = o.v.n + (sub ? ', ' + sub : '') + ', ' + dn + (o.prec === 'town' ? ' (town)' : '');
+        if (o.group === 2 && recDist) label = '⚠ ' + label + ' — different district from ' + recDist;
+        return { label, st: this.districts[o.did].st, did: o.did, sid: o.v.sid, lon: o.v.lon, lat: o.v.lat, prec: o.prec, place: o.v.n, score: +o.s.toFixed(3), group: o.group };
+      });
     }
   }
 

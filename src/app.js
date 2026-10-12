@@ -241,7 +241,7 @@
   function initMap() {
     S.map = L.map('map', { preferCanvas: true, zoomSnap: 0.25, minZoom: 3.5, maxZoom: 17, worldCopyJump: false });
     S.map.attributionControl.setPrefix(false);
-    S.map.attributionControl.addAttribution('Boundaries: LGD/Bharatmaps (Govt. of India) via DataMeet and ramSeraph; villages: Census 2011; towns: SBM');
+    S.map.attributionControl.addAttribution('Boundaries: LGD/Bharatmaps (Govt. of India) via DataMeet and ramSeraph; villages: Census 2011; towns: SBM, © GeoNames (CC BY 4.0)');
     S.map.createPane('areas').style.zIndex = 350;
     S.renderer = L.canvas({ padding: 0.4, pane: 'areas' });
     const tip = (layer, fn) => layer.bindTooltip(fn, { sticky: true, direction: 'top', opacity: 1 });
@@ -651,45 +651,56 @@
   }
 
   // ---------- data quality ----------
-  function fixGroups(recs) {
+  function fixGroups(recs, includeApprox) {
     const m = new Map();
     for (const r of recs) {
-      if (!r.g || !(r.g.prec === 'none' || r.g.prec === 'taluka' || r.g.prec === 'district')) continue;
+      if (!r.g) continue;
+      const p = r.g.prec;
+      if (!(p === 'none' || (includeApprox && (p === 'taluka' || p === 'district')))) continue;
       const key = [r.st, r.di, r.ta, r.vi].map(Geo.norm).join('|');
       if (!m.has(key)) m.set(key, { key, r, n: 0 }); m.get(key).n++;
     }
     return [...m.values()].sort((a, b) => (a.r.g.prec === 'none' ? -1 : 0) - (b.r.g.prec === 'none' ? -1 : 0) || b.n - a.n);
   }
-  function renderFixList(container, recs, onDone, limit) {
-    const groups = fixGroups(recs);
-    limit = limit || 40;
-    if (!groups.length) { container.innerHTML = '<p class="muted" style="margin:0">Every location in this selection is matched to a village or town.</p>'; return 0; }
-    container.innerHTML = `<p class="muted" style="margin-top:0">Pick the right place, type coordinates as "lat, lon", or leave it. Fixes are saved and reused for future uploads with the same spelling.</p>` +
+  /* The fixer. By default it lists only places that are NOT on the map. Places already shown at a taluka or district
+     centre are optional improvements, shown when "includeApprox" is ticked. */
+  function renderFixList(container, recs, onDone, opts) {
+    opts = opts || {};
+    const limit = opts.limit || 40, inc = !!S.fixApprox;
+    const nNone = fixGroups(recs, false).length, nAll = fixGroups(recs, true).length;
+    const groups = fixGroups(recs, inc);
+    const toggle = `<label class="check" style="height:auto;margin:0 0 10px"><input type="checkbox" class="fixApproxToggle" ${inc ? 'checked' : ''}> Also show the ${fmt(nAll - nNone)} place names placed at a taluka or district centre (optional; they are already on the map)</label>`;
+    if (!groups.length) {
+      container.innerHTML = (nAll - nNone ? toggle : '') + `<p class="muted" style="margin:0">${nNone ? '' : 'Every row in this selection is on the map. '}${inc ? 'Nothing left to improve.' : 'Nothing needs fixing.'}</p>`;
+      bindToggle(); return 0;
+    }
+    function bindToggle() { const t = container.querySelector('.fixApproxToggle'); if (t) t.onchange = e => { S.fixApprox = e.target.checked; renderFixList(container, recs, onDone, opts); }; }
+    const sugFor = g => S.geo.suggest({ state: g.r.st, district: g.r.di, taluka: g.r.ta, village: g.r.vi, hq: g.r.hq, current: g.r.g }, 6);
+    container.innerHTML = toggle + `<p class="muted" style="margin-top:0">Choose the right place, or "Enter coordinates…" and type "lat, lon" (right-click the spot in Google Maps to copy them). Options marked ⚠ are in a different district from the one recorded; pick them only if you know the record is wrong. Fixes are reused for every later upload with the same spelling.</p>` +
       groups.slice(0, limit).map((g, i) => {
-        const sug = S.geo.suggest({ state: g.r.st, district: g.r.di, taluka: g.r.ta, village: g.r.vi, hq: g.r.hq }, 6);
+        const sug = sugFor(g);
         return `<div class="fixrow" data-i="${i}">
           <div><b>${esc(g.r.vi || '(no village)')}</b><br><span class="muted" style="font-size:12px">${esc([g.r.ta, g.r.di, g.r.st].filter(Boolean).join(', ') || 'no state/district/taluka')}${g.r.hq ? ' (HQ ' + esc(g.r.hq) + ')' : ''}</span><br><span class="prec ${g.r.g.prec}">${PREC_LABEL[g.r.g.prec]}</span></div>
           <div class="num muted">${g.n} row${g.n > 1 ? 's' : ''}</div>
-          <div><select>${sug.length ? '' : '<option value="">No close matches found</option>'}${sug.map((s, j) => `<option value="${j}">${esc(s.label)} (${Math.round(s.score * 100)}%)</option>`).join('')}<option value="ll">Enter coordinates…</option></select><input class="hidden" placeholder="21.1458, 79.0882" style="margin-top:4px"></div>
+          <div><select><option value="">${sug.length ? '— choose a place —' : 'No close matches; enter coordinates or leave it'}</option>${sug.map((s, j) => `<option value="${j}">${esc(s.label)}${s.group === 1 ? '' : ' (' + Math.round(s.score * 100) + '%)'}</option>`).join('')}<option value="ll">Enter coordinates…</option></select><input class="hidden" placeholder="21.1458, 79.0882" style="margin-top:4px"></div>
           <button class="btn">Apply</button></div>`;
       }).join('') + (groups.length > limit ? `<p class="muted">${groups.length - limit} more not shown; they appear here as you fix these.</p>` : '');
+    bindToggle();
     container.querySelectorAll('.fixrow').forEach(row => {
       const g = groups[+row.dataset.i];
-      const sug = S.geo.suggest({ state: g.r.st, district: g.r.di, taluka: g.r.ta, village: g.r.vi, hq: g.r.hq }, 6);
+      const sug = sugFor(g);
       const sel = row.querySelector('select'), inp = row.querySelector('input');
       sel.addEventListener('change', () => inp.classList.toggle('hidden', sel.value !== 'll'));
-      if (sel.value === 'll') inp.classList.remove('hidden');
       row.querySelector('button').addEventListener('click', async () => {
         let fix;
         if (sel.value === 'll') {
           const m = inp.value.match(/(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)/);
           if (!m || +m[1] < 6 || +m[1] > 37.5 || +m[2] < 68 || +m[2] > 97.5) { toast('Enter coordinates inside India as "lat, lon"'); return; }
           const lat = +m[1], lon = +m[2];
-          const loc = locate(lon, lat);
-          fix = Object.assign({ lat, lon, place: g.r.vi || 'Manual point' }, loc);
+          fix = Object.assign({ lat, lon, place: g.r.vi || 'Manual point' }, locate(lon, lat));
         } else if (sel.value !== '') { const s = sug[+sel.value]; fix = { st: s.st, did: s.did, sid: s.sid, lat: s.lat, lon: s.lon, place: s.place }; }
-        else return;
-        S.fixes[g.key] = Object.assign(fix, { prec: 'manual', score: 1, note: 'Corrected by user' });
+        else { toast('Choose a place from the list first'); return; }
+        S.fixes[g.key] = Object.assign(fix, { prec: 'manual', score: 1, note: 'Corrected by user', fixedAt: new Date().toISOString() });
         await S.store.setKV('geoFixes', S.fixes);
         S.geo.cache.clear();
         for (const r of S.records) r.g = resolveOne(r);
@@ -698,6 +709,20 @@
       });
     });
     return groups.length;
+  }
+  function exportFixes() {
+    const n = Object.keys(S.fixes).length;
+    if (!n) { toast('No location fixes saved yet'); return; }
+    saveFile('location_fixes.json', new Blob([JSON.stringify({ app: 'field-visit-atlas', version: 1, fixes: S.fixes }, null, 1)], { type: 'application/json' }));
+  }
+  async function importFixes(file) {
+    try {
+      const obj = JSON.parse(await file.text());
+      const fx = obj && obj.fixes ? obj.fixes : obj;
+      let n = 0; for (const [k, v] of Object.entries(fx)) { if (v && typeof v.lat === 'number' && typeof v.lon === 'number') { S.fixes[k] = v; n++; } }
+      await S.store.setKV('geoFixes', S.fixes); S.geo.cache.clear(); for (const r of S.records) r.g = resolveOne(r);
+      toast(`Imported ${n} location fixes`); refresh();
+    } catch (e) { toast('That file is not a location-fixes file'); }
   }
   // point-in-polygon against the sub-district layer for manual coordinates
   function locate(lon, lat) {
@@ -713,8 +738,9 @@
     const b = $('#qbadge'); b.textContent = n; b.classList.toggle('hidden', !n); b.title = n + ' rows with unresolved location';
   }
   function renderQuality() {
-    const n = renderFixList($('#fixBody'), S.curAll, () => { refresh(); });
-    $('#fixCount').textContent = n ? n + ' place names need attention' : '';
+    renderFixList($('#fixBody'), S.curAll, () => { refresh(); });
+    const nNone = fixGroups(S.curAll, false).length;
+    $('#fixCount').textContent = nNone ? nNone + ' place names not on the map' : 'all rows are on the map';
     // batches
     const bt = $('#batchTable');
     table(bt, [
@@ -802,9 +828,10 @@
           <span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
             ${s.dupInFile ? `<label class="check"><input type="checkbox" id="keepDup" ${up.keepDup ? 'checked' : ''}> Keep in-file duplicates</label>` : ''}
             <button class="btn" id="upBack">Back</button>
-            ${(s.unresolved + s.approx) ? `<button class="btn" id="upFix">Fix locations (${fmt(fixGroups(v.rows.filter(r => r.status === 'new').map(r => r.rec)).length)})</button>` : ''}
+            ${(s.unresolved + s.approx) ? `<button class="btn" id="upFix">${s.unresolved ? 'Fix places not on the map (' + fmt(fixGroups(v.rows.filter(r => r.status === 'new').map(r => r.rec), false).length) + ')' : 'Improve approximate places (optional)'}</button>` : ''}
             <button class="btn primary" id="upSave" ${saveN ? '' : 'disabled'}>Save ${fmt(saveN)} rows</button></span></div></div>
         <div class="panel ${up.step === 3 ? '' : 'hidden'}" style="margin-top:14px"><h2>Fix locations in this file</h2><div class="body" id="upFixBody"></div></div>
+        ${s.approx ? `<div class="note info" style="margin-top:14px">${fmt(s.approx)} rows are placed at a taluka or district centre because the village name was not found in the Census list (hamlets, localities, markets, spelling variants). They are on the map and counted; fixing them is optional and only improves pin precision.</div>` : ''}
         <div class="panel" style="margin-top:14px"><header><span>Rows needing attention (${fmt(issueRows.length)})</span><select id="issueFilter" style="height:30px;border:1px solid var(--line);border-radius:6px;background:var(--surface)"><option value="">All issues</option>${codes.map(c => `<option value="${c}">${esc(label(c))}</option>`).join('')}</select></header>
           <div class="tablewrap" style="max-height:480px;overflow:auto"><table class="t" id="issueTable"></table></div></div>`;
       const drawIssues = () => {
@@ -821,7 +848,7 @@
       if ($('#keepDup')) $('#keepDup').onchange = e => { up.keepDup = e.target.checked; renderUpload(); };
       $('#upBack').onclick = () => { up.step = 1; renderUpload(); };
       if ($('#upFix')) $('#upFix').onclick = () => { up.step = 3; renderUpload(); setTimeout(() => $('#upFixBody').scrollIntoView({ behavior: 'smooth' }), 50); };
-      if (up.step === 3) renderFixList($('#upFixBody'), v.rows.filter(r => r.status === 'new').map(r => r.rec), () => runValidation(true));
+      if (up.step === 3) { if (!s.unresolved) S.fixApprox = true; renderFixList($('#upFixBody'), v.rows.filter(r => r.status === 'new').map(r => r.rec), () => runValidation(true)); }
       $('#upSave').onclick = saveUpload;
       return;
     }
@@ -982,7 +1009,7 @@
       <div class="panel"><h2>Map data and licences</h2><div class="body" style="font-size:13.5px">
         <p style="margin-top:0"><b>State, district and taluka boundaries:</b> Local Government Directory / Bharatmaps (National Informatics Centre, Government of India), republished by ramSeraph/indian_admin_boundaries under CC0 1.0 with attribution to DataMeet and the original government source. The national outline follows the official depiction of India. Simplified for web display, so borders are approximate at street level.</p>
         <p><b>Village locations:</b> Census of India 2011 village points, from the same repository (CC0 1.0). Village names and boundaries change; newer villages may be missing.</p>
-        <p><b>Town locations:</b> Swachh Bharat Mission urban local body boundaries, from the same repository (CC0 1.0).</p>
+        <p><b>Town locations:</b> Swachh Bharat Mission urban local body boundaries, from the same repository (CC0 1.0), plus cities missing from that list from GeoNames (© GeoNames, CC BY 4.0).</p>
         <p><b>Optional base maps:</b> OpenStreetMap tiles (© OpenStreetMap contributors, ODbL; light use only under the OSMF tile policy) and Esri World Imagery (check Esri terms before commercial use). OpenStreetMap shows some borders differently from the official map; the official boundary overlay stays on top. In the claude.ai version these tiles are blocked, so the official boundaries are the only base map.</p>
         <p class="muted">Village lists are bundled for ${S.bundledStates.map(s => esc(S.geo.states[s].name)).join(', ') || 'no states'}${location.protocol.startsWith('http') ? '; other states load on demand when the page is served from a web host' : ''}. ${missingGaz.length ? 'Districts in your data without a bundled list (placed at taluka centre unless the full list can load): ' + missingGaz.map(esc).join(', ') + '.' : 'All districts in your data have a village list.'}</p></div></div>
       <div class="panel"><h2>Location precision across all data</h2><div class="body"><ul class="minilist">${['gps', 'manual', 'village', 'town', 'taluka', 'district', 'none'].filter(k => precCounts.get(k)).map(k => `<li><span><span class="prec ${k}">${PREC_LABEL[k]}</span></span><span class="num">${fmt(precCounts.get(k))} (${pct(precCounts.get(k) / S.records.length)})</span></li>`).join('')}</ul>
@@ -1003,6 +1030,8 @@
     $('#expVisits').addEventListener('click', exportVisits);
     $('#expStaff').addEventListener('click', exportStaff);
     $('#expFlags').addEventListener('click', exportFlags);
+    $('#fixExport').addEventListener('click', exportFixes);
+    $('#fixImportFile').addEventListener('change', e => { const f = e.target.files[0]; if (f) importFixes(f); e.target.value = ''; });
     $('#tplBtn').addEventListener('click', templateXlsx);
     $('#planFile').addEventListener('change', e => { const f = e.target.files[0]; if (f) loadPlanFile(f); e.target.value = ''; });
     const mq = window.matchMedia('(prefers-color-scheme: dark)');

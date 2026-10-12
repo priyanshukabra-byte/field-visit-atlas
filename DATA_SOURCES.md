@@ -6,8 +6,10 @@ All geographic reference data comes from Government of India sources. It was obt
 |---|---|---|---|
 | `india_admin.topo.json` | 6,470 sub-districts (taluka / tehsil / block / mandal), dissolved into 785 districts and 36 states/UTs | Local Government Directory boundaries served by Bharatmaps (National Informatics Centre, MeitY) | Simplified with mapshaper for web display (about 0.5% of original vertices). Districts and states are built from the sub-districts, so all three levels share exactly the same borders. |
 | `geo_meta.json` | District names, LGD district codes, state codes, label points | LGD district layer (Bharatmaps) | Some LGD names lag official renamings, e.g. Osmanabad (Dharashiv), Ahmednagar (Ahilyanagar), Aurangabad (Chhatrapati Sambhajinagar). `src/geo.js` maps both names. |
-| `towns.json` | About 3,368 urban local bodies with a point inside each | Swachh Bharat Mission (Urban) ULB boundaries | Suffixes such as "Municipal Council" and "Nagar Panchayat" are stripped so that "Washim" matches "Municipal Council Washim". |
-| `gazetteer/<state>.json` | About 645,000 village points with name and population class | Census of India 2011 village locations (via DataMeet / SHRUG) | Villages are re-assigned to *current* sub-districts by location. Villages created after 2011 are missing. |
+| `towns.json` | About 3,368 urban local bodies with a point inside each, plus about 1,800 further towns and cities | Swachh Bharat Mission (Urban) ULB boundaries (CC0 via ramSeraph); missing towns from **GeoNames** cities1000 (CC BY 4.0, © GeoNames, geonames.org) | The SBM list lacks many large cities (Varanasi, Pune, Basti and over 300 district headquarters), so GeoNames fills them. Suffixes such as "Municipal Council" and "Nagar Panchayat" are stripped so that "Washim" matches "Municipal Council Washim". |
+| `gazetteer/<state>.json` | About 645,000 village points with name and population class | Census of India 2011 village locations, served by Bharatmaps (NIC) and republished by ramSeraph (CC0 1.0) | Villages are re-assigned to *current* sub-districts by location. Villages created after 2011 are missing, and so are hamlets, city localities and market names. |
+
+**Not used:** SHRUG village and town polygons are excluded. They carry a non-commercial licence (CC BY-NC-SA 4.0), which does not fit a company tool.
 
 ## National boundary
 

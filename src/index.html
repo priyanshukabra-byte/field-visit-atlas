@@ -331,7 +331,7 @@ details.flag .inner { padding: 0 16px 12px; max-height: 360px; overflow: auto; }
     <div class="page-head"><div><h1>Data quality</h1><p>Checks run on all stored data in the selected period. Flags are prompts for review, not proof of misconduct.</p></div><button class="btn" id="expFlags">Export flags</button></div>
     <div class="grid2">
       <div class="stack">
-        <div class="panel"><header><span>Locations to fix</span><span class="muted" style="font-weight:400" id="fixCount"></span></header><div class="body" id="fixBody"></div></div>
+        <div class="panel"><header><span>Locations to fix <span class="muted" style="font-weight:400" id="fixCount"></span></span><span><button class="btn" id="fixExport" title="Save your location fixes to a file, to load them in another browser">Export fixes</button> <label class="btn" for="fixImportFile">Import fixes</label><input type="file" id="fixImportFile" accept=".json" class="hidden"></span></header><div class="body" id="fixBody"></div></div>
         <div class="panel"><header><span>Upload history</span></header><div class="tablewrap"><table class="t" id="batchTable"></table></div></div>
       </div>
       <div class="panel" id="flagPanel"><header><span>Review flags</span></header><div id="flagBody"></div></div>

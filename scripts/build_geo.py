@@ -7,6 +7,9 @@ Inputs (download from https://github.com/ramSeraph/indian_admin_boundaries/relea
   census-2011/Census_Villages.parquet     - Census 2011 village points (name, lon/lat, population)
   urban/SBM_ULBs.parquet                  - Swachh Bharat Mission urban local body polygons (towns)
 All are republished under CC0 1.0 by ramSeraph (attribute DataMeet and the original government source).
+Optional, recommended: GeoNames cities1000 (CC BY 4.0), https://download.geonames.org/export/dump/cities1000.zip
+  (unzip to cities1000.txt in the same folder). It fills cities missing from the SBM list (e.g. Varanasi, Pune, Basti).
+  The rg_cities1000.csv file shipped with the reverse_geocoder Python package is also accepted.
 
 Outputs (in ../data):
   india_admin.topo.json   - TopoJSON with subdistricts / districts / states sharing arcs
@@ -85,6 +88,33 @@ for did, g in u.groupby('did'):
         if not n: continue
         x, y = xy(p.x, p.y); parts.append(f'{n}|{x}|{y}|{s}')
     towns[int(did)] = ';'.join(parts)
+# add GeoNames places that the SBM list lacks (same district, no similar name already present)
+def load_geonames():
+    import csv
+    pts = []
+    f1, f2 = P('cities1000.txt'), P('rg_cities1000.csv')
+    if os.path.exists(f1):
+        for r in csv.reader(open(f1, encoding='utf-8'), delimiter='\t'):
+            if len(r) > 8 and r[8] == 'IN' and r[6] == 'P': pts.append((r[2] or r[1], float(r[5]), float(r[4])))
+    elif os.path.exists(f2):
+        for r in csv.DictReader(open(f2, encoding='utf-8')):
+            if r['cc'] == 'IN': pts.append((r['name'], float(r['lon']), float(r['lat'])))
+    return pts
+gn = load_geonames()
+if gn:
+    g = gpd.GeoDataFrame({'n': [x[0] for x in gn]}, geometry=gpd.points_from_xy([x[1] for x in gn], [x[2] for x in gn]), crs='OGC:CRS84')
+    g = gpd.sjoin(g, sd[['sid', 'did', 'geometry']], how='inner', predicate='within'); g = g[~g.index.duplicated()]
+    norm = lambda t: re.sub(r'[^a-z]', '', t.lower())
+    added = 0
+    for did, gg in g.groupby('did'):
+        have = set(norm(p.split('|')[0]) for p in towns.get(int(did), '').split(';') if p)
+        parts = [towns[int(did)]] if towns.get(int(did)) else []
+        for n, p, s_ in zip(gg.n, gg.geometry, gg.sid):
+            n = clean_town(n)
+            if not n or norm(n) in have: continue
+            have.add(norm(n)); x, y = xy(p.x, p.y); parts.append(f'{n}|{x}|{y}|{s_}'); added += 1
+        towns[int(did)] = ';'.join(parts)
+    print('GeoNames towns added:', added)
 json.dump(towns, open(os.path.join(OUT, 'towns.json'), 'w'), separators=(',', ':'))
 
 # villages: Census 2011 points, re-assigned to current sub-districts spatially
