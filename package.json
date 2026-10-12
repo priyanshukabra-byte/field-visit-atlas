@@ -1,0 +1,20 @@
+{
+  "name": "field-visit-atlas",
+  "version": "1.0.0",
+  "private": true,
+  "description": "India sales-visit GIS dashboard for Basant Agro Tech: daily CRM Excel upload, official boundaries, village-level mapping, coverage gaps and data-quality checks.",
+  "scripts": {
+    "build": "node scripts/build.js",
+    "bundle-districts": "node scripts/bundle-districts.js",
+    "seed": "node scripts/make-seed.js",
+    "serve": "npx --yes http-server dist -p 8080 -c-1"
+  },
+  "devDependencies": {
+    "chart.js": "4.4.1",
+    "leaflet": "1.9.4",
+    "leaflet.heat": "0.2.0",
+    "leaflet.markercluster": "1.5.3",
+    "topojson-client": "3.1.0",
+    "xlsx": "0.18.5"
+  }
+}

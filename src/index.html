@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Field Visit Atlas — Basant Agro Tech</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,300..800&display=swap" rel="stylesheet">
+<style>
+/*INLINE_LIB_CSS*/
+:root {
+  --canvas: #EBEFEC; --surface: #FFFFFF; --surface-2: #F5F7F5; --ink: #15211C; --ink-2: #3E4C45; --muted: #66756D; --line: #D3DBD6; --line-2: #E4E9E6;
+  --accent: #125A4A; --accent-ink: #FFFFFF; --accent-soft: #DCEBE5; --warn: #A15C07; --warn-soft: #FBEBD3; --bad: #A33A2C; --bad-soft: #F7E1DD; --good: #2F6B2F;
+  --map-bg: #DCE3E3; --land: #F9FAF8; --land-line: #B7C3BD; --state-line: #6E7F77; --sel: #125A4A;
+  --c-farmer: #5E9A2A; --c-dealer: #C47A1E; --c-trial: #6E48A6; --c-event: #C2426A; --c-other: #7F8A90; --c-halt: #AEB6BA;
+  --c-new: #1C7C8C; --c-old: #8A6D3B; --c-blank: #9AA3A7; --c-village: #125A4A; --c-town: #2F6FB0; --c-approx: #C47A1E; --c-none: #A33A2C;
+  --ch0: #E9F1EC; --ch1: #C5DDD2; --ch2: #8FBFAB; --ch3: #4E9A81; --ch4: #1E6F59; --ch5: #0B4A3B;
+  --radius: 6px; --font: 'Archivo', 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
+  box-sizing: border-box; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --canvas: #101714; --surface: #18211D; --surface-2: #1E2924; --ink: #E6EEEA; --ink-2: #C3D0CA; --muted: #93A39B; --line: #2D3B35; --line-2: #24302B;
+  --accent: #5CC2A3; --accent-ink: #0B1F19; --accent-soft: #1D3A31; --warn: #E5A54B; --warn-soft: #3A2C17; --bad: #E58373; --bad-soft: #3B201C; --good: #8BC98B;
+  --map-bg: #0E1513; --land: #1B2420; --land-line: #3A4A43; --state-line: #6E8A7E; --sel: #5CC2A3;
+  --ch0: #1E2A25; --ch1: #23463B; --ch2: #2C6A57; --ch3: #3C8F74; --ch4: #5BB596; --ch5: #9BE0C6;
+} }
+:root[data-theme="dark"] {
+  --canvas: #101714; --surface: #18211D; --surface-2: #1E2924; --ink: #E6EEEA; --ink-2: #C3D0CA; --muted: #93A39B; --line: #2D3B35; --line-2: #24302B;
+  --accent: #5CC2A3; --accent-ink: #0B1F19; --accent-soft: #1D3A31; --warn: #E5A54B; --warn-soft: #3A2C17; --bad: #E58373; --bad-soft: #3B201C; --good: #8BC98B;
+  --map-bg: #0E1513; --land: #1B2420; --land-line: #3A4A43; --state-line: #6E8A7E; --sel: #5CC2A3;
+  --ch0: #1E2A25; --ch1: #23463B; --ch2: #2C6A57; --ch3: #3C8F74; --ch4: #5BB596; --ch5: #9BE0C6;
+}
+html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; background: var(--canvas); color: var(--ink); font-family: var(--font); font-size: 14px; line-height: 1.45; -webkit-font-smoothing: antialiased; }
+body { min-height: 100vh; }
+button, input, select { font: inherit; color: inherit; }
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.num { font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.hidden { display: none !important; }
+
+/* top bar */
+.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 1200; background: var(--surface); border-bottom: 1px solid var(--line); }
+.top-inner { display: flex; align-items: center; gap: 20px; padding: 0 20px; min-height: 56px; flex-wrap: wrap; }
+.brand { display: flex; align-items: baseline; gap: 10px; white-space: nowrap; }
+.brand b { font-stretch: 118%; font-weight: 700; font-size: 17px; letter-spacing: -0.01em; }
+.brand span { color: var(--muted); font-size: 12.5px; }
+nav.tabs { display: flex; gap: 2px; flex: 1; overflow-x: auto; scrollbar-width: none; }
+nav.tabs button { border: 0; background: none; padding: 17px 12px 15px; cursor: pointer; color: var(--ink-2); border-bottom: 2px solid transparent; white-space: nowrap; }
+nav.tabs button[aria-current="page"] { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
+nav.tabs button .badge { display: inline-block; min-width: 18px; padding: 0 5px; margin-left: 5px; border-radius: 9px; background: var(--warn-soft); color: var(--warn); font-size: 11.5px; font-weight: 600; text-align: center; }
+.status { display: flex; gap: 12px; align-items: center; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border: 1px solid var(--line); border-radius: 20px; background: var(--surface-2); color: var(--ink-2); font-size: 12px; }
+.chip i { width: 7px; height: 7px; border-radius: 50%; background: var(--good); display: inline-block; }
+.chip.warn i { background: var(--warn); }
+
+/* filter bar */
+.filters { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 56px); z-index: 1100; background: var(--surface-2); border-bottom: 1px solid var(--line); }
+.filters-inner { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; padding: 10px 20px; }
+.f { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.filter-toggle { display: none; }
+.f label { font-size: 11.5px; color: var(--muted); }
+.f select, .f input[type=date], .f input[type=search] { height: 32px; border: 1px solid var(--line); background: var(--surface); border-radius: var(--radius); padding: 0 8px; max-width: 210px; }
+.f input[type=search] { width: 200px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--surface); height: 32px; }
+.seg button { border: 0; background: none; padding: 0 11px; cursor: pointer; color: var(--ink-2); border-right: 1px solid var(--line); white-space: nowrap; }
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.check { display: inline-flex; align-items: center; gap: 6px; height: 32px; font-size: 13px; color: var(--ink-2); cursor: pointer; }
+.btn { height: 32px; padding: 0 12px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--surface); cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.btn.danger { color: var(--bad); border-color: var(--bad); }
+.btn.ghost { border-color: transparent; background: none; color: var(--accent); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+
+main { padding: 16px 20px 40px; max-width: 1680px; margin: 0 auto; }
+section.view { display: none; }
+section.view.on { display: block; }
+
+/* KPI ledger strip: one continuous band, numbers in the wide cut */
+.ledger { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 14px; }
+.kpi { padding: 12px 16px 13px; border-right: 1px solid var(--line-2); min-width: 0; }
+.kpi:last-child { border-right: 0; }
+.kpi .v { font-stretch: 125%; font-weight: 600; font-size: 27px; line-height: 1.05; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.kpi .l { font-size: 12.5px; color: var(--ink-2); margin-top: 4px; }
+.kpi .s { font-size: 11.5px; color: var(--muted); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kpi .s.up { color: var(--good); } .kpi .s.down { color: var(--bad); }
+
+/* dashboard grid */
+.dash { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 14px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); min-width: 0; }
+.panel > header .btn { font-weight: 400; }
+.panel > h2, .panel > header { margin: 0; padding: 12px 16px 10px; font-size: 14px; font-weight: 600; border-bottom: 1px solid var(--line-2); display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.panel .body { padding: 12px 16px; }
+.mapwrap { position: relative; height: min(66vh, 720px); min-height: 440px; border-radius: var(--radius); overflow: hidden; border: 1px solid var(--line); background: var(--map-bg); }
+.mapwrap.full { position: fixed; inset: 0; z-index: 3000; height: auto; border-radius: 0; padding-top: env(safe-area-inset-top, 0px); }
+#map { position: absolute; inset: 0; background: var(--map-bg); }
+.mapbar { position: absolute; top: 10px; left: 54px; right: 10px; z-index: 900; display: flex; gap: 8px; flex-wrap: wrap; pointer-events: none; }
+.mapbar > * { pointer-events: auto; box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+.mapbar .spacer { flex: 1; box-shadow: none; pointer-events: none; }
+.mapbar select { height: 32px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: 0 8px; }
+.crumbs { position: absolute; bottom: 10px; left: 10px; z-index: 900; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 10px; font-size: 13px; display: flex; gap: 4px; flex-wrap: wrap; max-width: calc(100% - 220px); }
+.crumbs button { border: 0; background: none; padding: 0; color: var(--accent); cursor: pointer; }
+.crumbs span.sep { color: var(--muted); }
+.legend { position: absolute; bottom: 10px; right: 10px; z-index: 900; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 10px; font-size: 12px; max-width: 240px; }
+.legend .row { display: flex; align-items: center; gap: 7px; margin: 2px 0; }
+.legend .sw { width: 11px; height: 11px; border-radius: 50%; flex: none; }
+.legend .sw.ring { background: transparent !important; border: 2px solid; }
+.legend .sq { width: 16px; height: 11px; flex: none; border: 1px solid var(--land-line); }
+.maptoast { position: absolute; top: 52px; left: 50%; transform: translateX(-50%); z-index: 950; background: var(--warn-soft); color: var(--warn); border: 1px solid var(--warn); border-radius: var(--radius); padding: 5px 10px; font-size: 12.5px; }
+
+.side { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.side .panel { max-height: none; }
+.insights { margin: 0; padding: 0; list-style: none; }
+.insights li { padding: 8px 0; border-bottom: 1px solid var(--line-2); font-size: 13.5px; color: var(--ink-2); }
+.insights li:last-child { border-bottom: 0; }
+.detail dl { display: grid; grid-template-columns: 112px 1fr; gap: 5px 10px; margin: 0; font-size: 13px; }
+.detail dt { color: var(--muted); }
+.detail dd { margin: 0; overflow-wrap: anywhere; }
+.detail h3 { margin: 0 0 8px; font-size: 16px; font-stretch: 110%; }
+.prec { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 11.5px; font-weight: 600; }
+.prec.village, .prec.gps, .prec.manual { background: var(--accent-soft); color: var(--accent); }
+.prec.town { background: #DDE8F5; color: #24548A; }
+.prec.taluka, .prec.district { background: var(--warn-soft); color: var(--warn); }
+.prec.none { background: var(--bad-soft); color: var(--bad); }
+.minilist { list-style: none; padding: 0; margin: 6px 0 0; font-size: 13px; }
+.minilist li { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; border-bottom: 1px dashed var(--line-2); }
+.minilist li button { border: 0; background: none; padding: 0; color: var(--accent); cursor: pointer; text-align: left; }
+
+.charts { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 14px; margin-top: 14px; }
+.chartbox { position: relative; height: 270px; padding: 8px 12px 12px; }
+.chartnote { font-size: 12px; color: var(--muted); padding: 0 16px 12px; }
+
+/* tables */
+.tablewrap { overflow-x: auto; }
+table.t { width: 100%; border-collapse: collapse; font-size: 13px; font-stretch: 94%; }
+table.t th { text-align: left; font-weight: 600; color: var(--ink-2); padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; position: sticky; top: 0; background: var(--surface); cursor: pointer; user-select: none; }
+table.t th.nosort { cursor: default; }
+table.t th[aria-sort="ascending"]::after { content: ' ▲'; font-size: 9px; } table.t th[aria-sort="descending"]::after { content: ' ▼'; font-size: 9px; }
+#staffTable td:first-child { min-width: 190px; }
+table.t td { padding: 7px 10px; border-bottom: 1px solid var(--line-2); vertical-align: top; }
+table.t td.r, table.t th.r { text-align: right; font-variant-numeric: tabular-nums; }
+table.t tbody tr:hover { background: var(--surface-2); }
+table.t tbody tr.click { cursor: pointer; }
+.pager { display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; font-size: 12.5px; color: var(--muted); gap: 10px; flex-wrap: wrap; }
+.bar { height: 7px; border-radius: 4px; background: var(--line-2); overflow: hidden; min-width: 70px; }
+.bar > i { display: block; height: 100%; background: var(--accent); }
+.tag { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 11.5px; background: var(--surface-2); border: 1px solid var(--line); margin: 1px 3px 1px 0; }
+.tag.warn { background: var(--warn-soft); border-color: transparent; color: var(--warn); }
+.tag.bad { background: var(--bad-soft); border-color: transparent; color: var(--bad); }
+
+/* page layouts */
+.page-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; margin: 4px 0 14px; flex-wrap: wrap; }
+.page-head h1 { margin: 0; font-size: 24px; font-stretch: 116%; font-weight: 650; letter-spacing: -0.01em; }
+.page-head p { margin: 4px 0 0; color: var(--muted); max-width: 72ch; }
+.grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+.stack { display: flex; flex-direction: column; gap: 14px; }
+.note { border-left: 3px solid var(--warn); background: var(--warn-soft); padding: 9px 12px; border-radius: 0 var(--radius) var(--radius) 0; font-size: 13px; color: var(--ink-2); }
+.note.info { border-left-color: var(--accent); background: var(--accent-soft); }
+
+/* upload stepper */
+.steps { display: flex; gap: 0; margin: 0 0 14px; padding: 0; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
+.steps li { list-style: none; flex: 1; padding: 10px 14px; border-right: 1px solid var(--line-2); color: var(--muted); font-size: 13px; }
+.steps li:last-child { border-right: 0; }
+.steps li b { display: block; font-stretch: 115%; color: var(--ink-2); font-size: 13.5px; }
+.steps li.on { background: var(--accent-soft); } .steps li.on b { color: var(--accent); }
+.steps li.done b { color: var(--ink); }
+.drop { display: block; border: 2px dashed var(--line); border-radius: var(--radius); padding: 40px 20px; text-align: center; background: var(--surface); cursor: pointer; }
+.drop.over { border-color: var(--accent); background: var(--accent-soft); }
+.drop strong { display: block; font-size: 17px; font-stretch: 112%; margin-bottom: 6px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
+.tile { padding: 11px 14px; border-right: 1px solid var(--line-2); border-bottom: 1px solid var(--line-2); }
+.tile .v { font-stretch: 122%; font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.tile .l { font-size: 12.5px; color: var(--muted); }
+.tile.good .v { color: var(--good); } .tile.warn .v { color: var(--warn); } .tile.bad .v { color: var(--bad); }
+.maptable select { max-width: 220px; height: 30px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.fixrow { display: grid; grid-template-columns: minmax(0, 1.3fr) 60px minmax(0, 2fr) auto; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line-2); font-size: 13px; }
+.fixrow select, .fixrow input { height: 30px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); width: 100%; padding: 0 6px; }
+details.flag { border-bottom: 1px solid var(--line-2); }
+details.flag summary { padding: 10px 16px; cursor: pointer; display: flex; justify-content: space-between; gap: 10px; }
+details.flag summary .n { font-variant-numeric: tabular-nums; color: var(--warn); font-weight: 600; }
+details.flag .inner { padding: 0 16px 12px; max-height: 360px; overflow: auto; }
+.toast { position: fixed; bottom: calc(env(safe-area-inset-bottom, 0px) + 18px); left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--surface); padding: 9px 14px; border-radius: var(--radius); z-index: 5000; font-size: 13.5px; max-width: 90vw; }
+.loading { padding: 80px 20px; text-align: center; color: var(--muted); }
+.empty { padding: 50px 20px; text-align: center; }
+.empty strong { display: block; font-size: 18px; font-stretch: 115%; margin-bottom: 6px; }
+
+/* Leaflet theming */
+.leaflet-container { font-family: var(--font); background: var(--map-bg); }
+.leaflet-tooltip { background: var(--surface); color: var(--ink); border: 1px solid var(--line); box-shadow: 0 1px 3px rgba(0,0,0,.15); font-size: 12.5px; }
+.leaflet-control-zoom a { background: var(--surface) !important; color: var(--ink) !important; border-color: var(--line) !important; }
+.leaflet-control-attribution { background: color-mix(in srgb, var(--surface) 85%, transparent) !important; color: var(--muted) !important; font-size: 10.5px; }
+.leaflet-control-attribution a { color: var(--accent) !important; }
+.pt { display: block; width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid rgba(255,255,255,.95); box-shadow: 0 0 0 1px rgba(0,0,0,.25); }
+.pt.approx { background: transparent !important; border: 2.5px solid; box-shadow: none; }
+.clu { display: flex; align-items: center; justify-content: center; border-radius: 50%; background: color-mix(in srgb, var(--accent) 85%, transparent); color: var(--accent-ink); font-weight: 650; font-stretch: 110%; border: 2px solid var(--surface); box-shadow: 0 1px 3px rgba(0,0,0,.25); font-size: 12px; }
+
+@media (max-width: 1280px) { .ledger { grid-template-columns: repeat(4, minmax(0, 1fr)); } .kpi:nth-child(4) { border-right: 0; } .kpi:nth-child(-n+4) { border-bottom: 1px solid var(--line-2); } }
+@media (max-width: 1100px) { .dash { grid-template-columns: 1fr; } .charts { grid-template-columns: 1fr 1fr; } .charts > :first-child { grid-column: 1 / -1; } .grid2 { grid-template-columns: 1fr; } }
+@media (max-width: 680px) {
+  main { padding: 12px 10px 30px; } .filters-inner, .top-inner { padding-left: 10px; padding-right: 10px; }
+  .filters { position: static; } .filter-toggle { display: flex; width: calc(100% - 20px); margin: 8px 10px; justify-content: center; }
+  .filters:not(.open) .filters-inner { display: none; }
+  .filters-inner { display: grid; grid-template-columns: 1fr 1fr; } .filters-inner > .f:first-child, #customDates { grid-column: 1 / -1; }
+  .f select, .f input[type=search] { max-width: none; width: 100%; } .seg { overflow-x: auto; }
+  nav.tabs { order: 3; flex-basis: 100%; } .top-inner { gap: 0 12px; } nav.tabs button { padding: 10px 10px 9px; } .ledger { grid-template-columns: repeat(2, minmax(0, 1fr)); } .kpi { border-bottom: 1px solid var(--line-2); } .kpi:nth-child(2n) { border-right: 0; }
+  .kpi .v { font-size: 22px; } .charts { grid-template-columns: 1fr; } .mapwrap { height: 70vh; min-height: 380px; } .status { display: none; }
+  .mapbar #basemap, .mapbar #fitBtn, .mapbar #colorBy, .mapbar #areaLevel { display: none; } .mapbar .seg button { padding: 0 8px; }
+  .crumbs { max-width: 55%; } .legend { max-width: 44%; font-size: 11px; } .fixrow { grid-template-columns: 1fr; }
+  .steps { flex-direction: column; } .steps li { border-right: 0; border-bottom: 1px solid var(--line-2); }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+@media print {
+  .top, .filters, .mapbar, nav, .no-print { display: none !important; }
+  body { background: #fff; } .panel { break-inside: avoid; }
+}
+</style>
+<!--INLINE_DATA-->
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js" integrity="sha384-eXVCORTRlv4FUUgS/xmOyr66XBVraen8ATNLMESp92FKXLAMiKkerixTiBvXriZr" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet.heat@0.2.0/dist/leaflet-heat.js" integrity="sha384-mFKkGiGvT5vo1fEyGCD3hshDdKmW3wzXW/x+fWriYJArD0R3gawT6lMvLboM22c0" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js" integrity="sha384-Ukv1p/xTma6P4/2bY5KzWBw+ydSpXmhCMtyciIQVDJ1RmOxtCYNMF1uXT9T63H67" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js" integrity="sha384-dug+JxfBvklEQdJ4AYuBBAIScUz0bVN73xpy273gcAwHjb3qI0fXmuYNaNfdyYJG" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" integrity="sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw" crossorigin="anonymous"></script>
+</head>
+<body>
+<header class="top">
+  <div class="top-inner">
+    <div class="brand"><b>Field Visit Atlas</b><span>Basant Agro Tech</span></div>
+    <nav class="tabs" id="tabs" aria-label="Sections">
+      <button data-view="dashboard" aria-current="page">Dashboard</button>
+      <button data-view="upload">Upload</button>
+      <button data-view="staff">Staff</button>
+      <button data-view="coverage">Coverage</button>
+      <button data-view="quality">Data quality<span class="badge hidden" id="qbadge"></span></button>
+      <button data-view="reports">Reports</button>
+      <button data-view="settings">Sources</button>
+    </nav>
+    <div class="status"><span id="dataThrough"></span><span class="chip" id="storeChip"><i></i><span>Loading</span></span></div>
+  </div>
+</header>
+
+<div class="filters" id="filterbar">
+  <button class="btn filter-toggle" id="filterToggle" aria-expanded="false" aria-controls="filtersInner">Filters</button>
+  <div class="filters-inner" id="filtersInner">
+    <div class="f"><label>Period</label>
+      <div class="seg" id="periodSeg">
+        <button data-p="day">Latest day</button><button data-p="7">7 days</button><button data-p="month">Month</button><button data-p="all">All</button><button data-p="custom">Custom</button>
+      </div>
+    </div>
+    <div class="f hidden" id="customDates"><label>From – to</label><div style="display:flex;gap:6px"><input type="date" id="fFrom"><input type="date" id="fTo"></div></div>
+    <div class="f"><label for="fUser">Staff</label><select id="fUser"></select></div>
+    <div class="f"><label for="fMgr">Manager</label><select id="fMgr"></select></div>
+    <div class="f"><label for="fState">State</label><select id="fState"></select></div>
+    <div class="f"><label for="fDist">District</label><select id="fDist"></select></div>
+    <div class="f"><label for="fSub">Taluka</label><select id="fSub"></select></div>
+    <div class="f"><label for="fAct">Activity</label><select id="fAct"></select></div>
+    <div class="f"><label for="fVt">Customer</label><select id="fVt"><option value="">New and old</option><option value="New">New</option><option value="Old">Old</option><option value="(blank)">Not recorded</option></select></div>
+    <div class="f"><label for="fQ">Search</label><input type="search" id="fQ" placeholder="Customer, village, phone"></div>
+    <label class="check" title="Night halts and 'Other visit' entries are not customer visits"><input type="checkbox" id="fCust" checked> Customer visits only</label>
+    <button class="btn ghost" id="fReset">Reset filters</button>
+  </div>
+</div>
+
+<main id="main">
+  <div class="loading" id="loading">Loading boundaries and data…</div>
+
+  <section class="view" id="v-dashboard">
+    <div class="ledger" id="ledger"></div>
+    <div class="dash">
+      <div class="stack" style="gap:0">
+        <div class="mapwrap" id="mapwrap">
+          <div id="map" role="application" aria-label="Map of India with field visits"></div>
+          <div class="mapbar">
+            <div class="seg" id="modeSeg"><button data-m="points">Visit points</button><button data-m="heat">Heat</button><button data-m="areas">Area totals</button></div>
+            <select id="colorBy" aria-label="Colour points by"><option value="activity">Colour: activity</option><option value="vt">Colour: new / old</option><option value="prec">Colour: location precision</option></select>
+            <select id="areaLevel" aria-label="Area level" class="hidden"><option value="auto">Areas: auto</option><option value="district">Areas: districts</option><option value="taluka">Areas: talukas</option></select>
+            <span class="spacer"></span>
+            <select id="basemap" aria-label="Base map"><option value="none">Official boundaries only</option><option value="osm">Streets (OpenStreetMap)</option><option value="sat">Satellite (Esri)</option></select>
+            <button class="btn" id="fitBtn" title="Zoom to the current selection">Fit</button>
+            <button class="btn" id="fullBtn" title="Full screen">Full screen</button>
+          </div>
+          <div class="crumbs" id="crumbs"></div>
+          <div class="legend" id="legend"></div>
+        </div>
+      </div>
+      <aside class="side">
+        <div class="panel detail" id="detailPanel"><header><span id="detailTitle">Selection</span><button class="btn ghost hidden" id="detailClose">Clear</button></header><div class="body" id="detailBody"></div></div>
+        <div class="panel"><h2>What the data says</h2><div class="body"><ul class="insights" id="insights"></ul></div></div>
+      </aside>
+    </div>
+    <div class="charts">
+      <div class="panel"><h2><span>Daily activity</span><span class="muted" style="font-weight:400;font-size:12px" id="trendNote"></span></h2><div class="chartbox"><canvas id="chTrend"></canvas></div></div>
+      <div class="panel"><h2 id="geoChartTitle">Visits by area</h2><div class="chartbox"><canvas id="chGeo"></canvas></div></div>
+      <div class="panel"><h2>Visits by staff member</h2><div class="chartbox"><canvas id="chStaff"></canvas></div></div>
+    </div>
+    <div class="panel" style="margin-top:14px">
+      <header><span>Visit list <span class="muted" id="visitCount" style="font-weight:400"></span></span><span><button class="btn" id="expVisits">Export to Excel</button></span></header>
+      <div class="tablewrap"><table class="t" id="visitTable"></table></div>
+      <div class="pager" id="visitPager"></div>
+    </div>
+  </section>
+
+  <section class="view" id="v-upload">
+    <div class="page-head"><div><h1>Upload daily file</h1><p>Add the CRM "Summary Export Report" (.xlsx or .xls). Rows already uploaded are skipped automatically, so re-uploading an overlapping date range is safe.</p></div></div>
+    <ol class="steps" id="steps"><li data-s="1"><b>1. Choose file</b>Read and detect columns</li><li data-s="2"><b>2. Check</b>Validation report</li><li data-s="3"><b>3. Fix locations</b>Optional</li><li data-s="4"><b>4. Save</b>Add to history</li></ol>
+    <div id="uploadBody"></div>
+  </section>
+
+  <section class="view" id="v-staff">
+    <div class="page-head"><div><h1>Staff</h1><p>Every figure follows the filters above. Working days count Monday to Saturday in the selected period; holidays are not known to the system.</p></div><button class="btn" id="expStaff">Export to Excel</button></div>
+    <div class="grid2" style="grid-template-columns:minmax(0,1.6fr) minmax(0,1fr)">
+      <div class="panel"><div class="tablewrap" style="max-height:72vh;overflow:auto"><table class="t" id="staffTable"></table></div></div>
+      <div class="panel detail"><header><span id="staffTitle">Select a staff member</span><button class="btn hidden" id="staffMap">Show on map</button></header><div class="body" id="staffBody"><p class="muted">Pick a row to see coverage, daily activity and review flags for that person.</p></div></div>
+    </div>
+  </section>
+
+  <section class="view" id="v-coverage">
+    <div class="page-head"><div><h1>Coverage gaps</h1><p>"No recorded visit" means nothing was logged there in the selected period. It becomes a confirmed miss only when an area is assigned to someone, which needs a territory plan.</p></div></div>
+    <div class="grid2">
+      <div class="panel"><header><span>Talukas without a recorded customer visit</span><span class="muted" style="font-weight:400" id="gapScope"></span></header><div class="tablewrap" style="max-height:70vh;overflow:auto"><table class="t" id="gapTable"></table></div></div>
+      <div class="panel"><header><span>Assigned territory vs visits</span><span><button class="btn" id="tplBtn">Download template</button> <label class="btn primary" for="planFile">Upload territory plan</label><input type="file" id="planFile" accept=".xlsx,.xls,.csv" class="hidden"></span></header><div class="body" id="planBody"></div></div>
+    </div>
+  </section>
+
+  <section class="view" id="v-quality">
+    <div class="page-head"><div><h1>Data quality</h1><p>Checks run on all stored data in the selected period. Flags are prompts for review, not proof of misconduct.</p></div><button class="btn" id="expFlags">Export flags</button></div>
+    <div class="grid2">
+      <div class="stack">
+        <div class="panel"><header><span>Locations to fix</span><span class="muted" style="font-weight:400" id="fixCount"></span></header><div class="body" id="fixBody"></div></div>
+        <div class="panel"><header><span>Upload history</span></header><div class="tablewrap"><table class="t" id="batchTable"></table></div></div>
+      </div>
+      <div class="panel" id="flagPanel"><header><span>Review flags</span></header><div id="flagBody"></div></div>
+    </div>
+  </section>
+
+  <section class="view" id="v-reports">
+    <div class="page-head"><div><h1>Reports</h1><p>Exports use the filters currently applied. Excel files open in Excel, Google Sheets or LibreOffice.</p></div></div>
+    <div class="grid2">
+      <div class="panel"><h2>Downloads</h2><div class="body"><table class="t" id="reportTable"></table></div></div>
+      <div class="panel"><h2>Management summary</h2><div class="body" id="summaryBody"></div></div>
+    </div>
+  </section>
+
+  <section class="view" id="v-settings">
+    <div class="page-head"><div><h1>Data &amp; sources</h1><p>Where the data lives, where the maps come from, and what the system cannot tell you.</p></div></div>
+    <div class="grid2">
+      <div class="stack" id="settingsLeft"></div>
+      <div class="stack" id="settingsRight"></div>
+    </div>
+  </section>
+</main>
+<input type="file" id="fileInput" accept=".xlsx,.xls,.xlsm,.csv" class="hidden">
+<!--INLINE_APP-->
+</body>
+</html>
